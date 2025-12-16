@@ -26,6 +26,10 @@ Thumbs.db
 
 # Downloaded data (optional - remove if you want to track data)
 Download/*.csv
+Download/*.xlsx
+
+# Claude Code local settings
+.claude/
 
 # Environment variables
 .env

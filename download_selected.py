@@ -61,11 +61,22 @@ print(f"\nResultat:")
 print(f"  Lyckade: {success_count} instrument")
 print(f"  Misslyckade: {len(selected_symbols) - success_count} instrument")
 
-# Spara till CSV
+# Spara till Excel
 if all_data:
     df = pd.DataFrame(all_data)
-    output_file = os.path.join(output_dir, "forex_metals_indexes_3days_D1.csv")
-    df.to_csv(output_file, index=False)
+    output_file = os.path.join(output_dir, "forex_metals_indexes_3days_D1.xlsx")
+
+    # Skapa Excel-fil med separata flikar per kategori
+    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        # Alla data pa en flik
+        df.to_excel(writer, sheet_name='Alla', index=False)
+
+        # Separata flikar per kategori
+        for category in selected_categories:
+            cat_df = df[df['category'] == category]
+            if not cat_df.empty:
+                cat_df.to_excel(writer, sheet_name=category, index=False)
+
     print(f"\nData sparad till: {output_file}")
     print(f"Totalt antal rader: {len(df)}")
 
@@ -73,7 +84,8 @@ if all_data:
     print(f"\nSammanfattning per kategori:")
     print(df.groupby('category')['symbol'].nunique())
 
-    print(f"\nForsta 15 raderna:")
-    print(df.head(15).to_string())
+    print(f"\nExcel-flikar skapade: Alla, Forex, Metals, Indexes")
+    print(f"\nForsta 10 raderna:")
+    print(df.head(10).to_string())
 
 mt5.shutdown()
