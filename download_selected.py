@@ -7,43 +7,80 @@ if not mt5.initialize():
     print(f"Initialisering misslyckades: {mt5.last_error()}")
     quit()
 
-# Hamta alla symboler
-symbols = mt5.symbols_get()
+# Lista med valda symboler
+SELECTED_SYMBOLS = [
+    "AUDCAD", "AUDCHF", "AUDJPY", "AUDNZD", "AUDSEK", "AUDSGD", "AUDUSD",
+    "CADCHF", "CADJPY", "CADSGD",
+    "CHFDKK", "CHFHUF", "CHFJPY", "CHFNOK", "CHFPLN", "CHFSEK", "CHFSGD",
+    "DKKSEK",
+    "EURAUD", "EURCAD", "EURCHF", "EURCNH", "EURCZK", "EURDKK", "EURGBP",
+    "EURHKD", "EURHUF", "EURJPY", "EURMXN", "EURNOK", "EURNZD", "EURPLN",
+    "EURRUR", "EURSEK", "EURSGD", "EURTRY", "EURUSD", "EURZAR",
+    "GBPAUD", "GBPCAD", "GBPCHF", "GBPCZK", "GBPDKK", "GBPHUF", "GBPJPY",
+    "GBPMXN", "GBPNOK", "GBPNZD", "GBPPLN", "GBPSEK", "GBPSGD", "GBPTRY",
+    "GBPUSD", "GBPZAR",
+    "HKDJPY", "NOKJPY", "NOKSEK",
+    "NZDCAD", "NZDCHF", "NZDDKK", "NZDJPY", "NZDSEK", "NZDSGD", "NZDUSD",
+    "SEKJPY", "SGDHKD", "SGDJPY", "TRYJPY",
+    "USDCAD", "USDCHF", "USDCNH", "USDCZK", "USDDKK", "USDHKD", "USDHUF",
+    "USDILS", "USDJPY", "USDMXN", "USDNOK", "USDPLN", "USDRMB", "USDSEK",
+    "USDSGD", "USDTHB", "USDTRY", "USDZAR",
+    "XAUUSD", "XAUEUR", "XAUAUD", "XAGUSD", "XAGEUR", "XPDUSD", "XPTUSD",
+    "XAGAUD", "XAUCHF", "XAUGBP",
+    "AUS200", "EUSTX50", "FRA40", "HK50", "JPN225", "US500", "US30M",
+    "US500M", "USTECH100M", "GER30M", "DE40", "US30", "USTEC", "CHINA50",
+    "CHINAH", "US2000", "ZARJPY"
+]
 
-# Filtrera pa kategori
-selected_categories = ["Forex", "Metals", "Indexes"]
-selected_symbols = []
+# Konfiguration
+DAYS_TO_DOWNLOAD = 365  # 1 ar
+TIMEFRAME = mt5.TIMEFRAME_D1
 
-for symbol in symbols:
-    path = symbol.path
-    if '\\' in path:
-        category = path.split('\\')[0]
+# Hamta alla symboler fran MT5
+all_symbols = mt5.symbols_get()
+available_symbols = {s.name: s.path for s in all_symbols}
+
+# Filtrera till endast valda som finns
+valid_symbols = []
+missing_symbols = []
+
+for symbol in SELECTED_SYMBOLS:
+    if symbol in available_symbols:
+        path = available_symbols[symbol]
+        if '\\' in path:
+            category = path.split('\\')[0]
+        else:
+            category = path
+        valid_symbols.append((category, symbol))
     else:
-        category = path
+        missing_symbols.append(symbol)
 
-    if category in selected_categories:
-        selected_symbols.append((category, symbol.name))
+print(f"Valda symboler: {len(SELECTED_SYMBOLS)}")
+print(f"Tillgangliga: {len(valid_symbols)}")
+print(f"Saknas hos maklaren: {len(missing_symbols)}")
+print(f"Period: {DAYS_TO_DOWNLOAD} dagar (1 ar)")
 
-print(f"Laddar ner data for {len(selected_symbols)} instrument...")
-print(f"  Forex: {sum(1 for c, _ in selected_symbols if c == 'Forex')}")
-print(f"  Metals: {sum(1 for c, _ in selected_symbols if c == 'Metals')}")
-print(f"  Indexes: {sum(1 for c, _ in selected_symbols if c == 'Indexes')}")
+if missing_symbols:
+    print(f"\nSaknade symboler: {', '.join(missing_symbols[:10])}")
+
 print("-" * 50)
 
 # Skapa Download-mappen
 output_dir = "Download"
 os.makedirs(output_dir, exist_ok=True)
 
-# Samla data per kategori
-all_data = []
+# Ladda ner och spara varje symbol separat
 success_count = 0
+failed_symbols = []
 
-for category, symbol_name in selected_symbols:
-    rates = mt5.copy_rates_from_pos(symbol_name, mt5.TIMEFRAME_D1, 0, 3)
+for i, (category, symbol_name) in enumerate(valid_symbols):
+    rates = mt5.copy_rates_from_pos(symbol_name, TIMEFRAME, 0, DAYS_TO_DOWNLOAD)
 
     if rates is not None and len(rates) > 0:
+        # Skapa DataFrame
+        data = []
         for rate in rates:
-            all_data.append({
+            data.append({
                 'category': category,
                 'symbol': symbol_name,
                 'time': datetime.fromtimestamp(rate['time']),
@@ -55,37 +92,29 @@ for category, symbol_name in selected_symbols:
                 'spread': rate['spread'],
                 'real_volume': rate['real_volume']
             })
+
+        df = pd.DataFrame(data)
+
+        # Spara till Excel med symbolnamn som filnamn
+        output_file = os.path.join(output_dir, f"{symbol_name}.xlsx")
+        df.to_excel(output_file, sheet_name='Data', index=False, engine='openpyxl')
+
         success_count += 1
 
+        # Visa progress
+        if (i + 1) % 20 == 0 or (i + 1) == len(valid_symbols):
+            print(f"Progress: {i + 1}/{len(valid_symbols)} ({symbol_name}: {len(df)} rader)")
+    else:
+        failed_symbols.append(symbol_name)
+
+print("-" * 50)
 print(f"\nResultat:")
-print(f"  Lyckade: {success_count} instrument")
-print(f"  Misslyckade: {len(selected_symbols) - success_count} instrument")
+print(f"  Lyckade: {success_count} filer skapade")
+print(f"  Misslyckade: {len(failed_symbols)} instrument")
 
-# Spara till Excel
-if all_data:
-    df = pd.DataFrame(all_data)
-    output_file = os.path.join(output_dir, "forex_metals_indexes_3days_D1.xlsx")
+if failed_symbols:
+    print(f"  Misslyckade symboler: {', '.join(failed_symbols)}")
 
-    # Skapa Excel-fil med separata flikar per kategori
-    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-        # Alla data pa en flik
-        df.to_excel(writer, sheet_name='Alla', index=False)
-
-        # Separata flikar per kategori
-        for category in selected_categories:
-            cat_df = df[df['category'] == category]
-            if not cat_df.empty:
-                cat_df.to_excel(writer, sheet_name=category, index=False)
-
-    print(f"\nData sparad till: {output_file}")
-    print(f"Totalt antal rader: {len(df)}")
-
-    # Visa sammanfattning per kategori
-    print(f"\nSammanfattning per kategori:")
-    print(df.groupby('category')['symbol'].nunique())
-
-    print(f"\nExcel-flikar skapade: Alla, Forex, Metals, Indexes")
-    print(f"\nForsta 10 raderna:")
-    print(df.head(10).to_string())
+print(f"\nFiler sparade i: {os.path.abspath(output_dir)}")
 
 mt5.shutdown()
