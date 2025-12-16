@@ -33,8 +33,14 @@ SELECTED_SYMBOLS = [
 ]
 
 # Konfiguration
-DAYS_TO_DOWNLOAD = 365  # 1 ar
+YEARS_TO_DOWNLOAD = 1  # Antal kalenderaar (1 = fran 1 jan i ar, 2 = fran 1 jan forra aret, osv)
 TIMEFRAME = mt5.TIMEFRAME_D1
+
+# Berakna datumintervall baserat pa kalenderaar
+current_year = datetime.now().year
+start_year = current_year - YEARS_TO_DOWNLOAD + 1
+start_date = datetime(start_year, 1, 1)
+end_date = datetime.now()
 
 # Hamta alla symboler fran MT5
 all_symbols = mt5.symbols_get()
@@ -58,7 +64,7 @@ for symbol in SELECTED_SYMBOLS:
 print(f"Valda symboler: {len(SELECTED_SYMBOLS)}")
 print(f"Tillgangliga: {len(valid_symbols)}")
 print(f"Saknas hos maklaren: {len(missing_symbols)}")
-print(f"Period: {DAYS_TO_DOWNLOAD} dagar (1 ar)")
+print(f"Period: {start_date.strftime('%Y-%m-%d')} till {end_date.strftime('%Y-%m-%d')} ({YEARS_TO_DOWNLOAD} kalenderaar)")
 
 if missing_symbols:
     print(f"\nSaknade symboler: {', '.join(missing_symbols[:10])}")
@@ -74,29 +80,26 @@ success_count = 0
 failed_symbols = []
 
 for i, (category, symbol_name) in enumerate(valid_symbols):
-    rates = mt5.copy_rates_from_pos(symbol_name, TIMEFRAME, 0, DAYS_TO_DOWNLOAD)
+    rates = mt5.copy_rates_range(symbol_name, TIMEFRAME, start_date, end_date)
 
     if rates is not None and len(rates) > 0:
         # Skapa DataFrame
         data = []
         for rate in rates:
             data.append({
-                'category': category,
-                'symbol': symbol_name,
-                'time': datetime.fromtimestamp(rate['time']),
+                'time': datetime.fromtimestamp(rate['time']).strftime('%Y-%m-%d'),
                 'open': rate['open'],
                 'high': rate['high'],
                 'low': rate['low'],
                 'close': rate['close'],
                 'tick_volume': rate['tick_volume'],
-                'spread': rate['spread'],
-                'real_volume': rate['real_volume']
+                'spread': rate['spread']
             })
 
         df = pd.DataFrame(data)
 
-        # Spara till Excel med symbolnamn som filnamn
-        output_file = os.path.join(output_dir, f"{symbol_name}.xlsx")
+        # Spara till Excel med symbol_category som filnamn
+        output_file = os.path.join(output_dir, f"{symbol_name}_{category}.xlsx")
         df.to_excel(output_file, sheet_name='Data', index=False, engine='openpyxl')
 
         success_count += 1
